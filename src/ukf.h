@@ -136,8 +136,18 @@ public:
     const VectorXd& weights,
     double std_laspx,
     double std_laspy) const;
-  MeanCovPair updateState(
+  MeanCovPair updateRadarState(
     const MatrixXd& Xsig_pred,
+    const MatrixXd& weights,
+    const VectorXd& x,
+    const MatrixXd& P,
+    const MatrixXd& Zsig,
+    const VectorXd& z_pred,
+    const MatrixXd& S,
+    const VectorXd& z) const;
+  MeanCovPair updateLidarState(
+    const MatrixXd& Xsig_pred,
+    const MatrixXd& weights,
     const VectorXd& x,
     const MatrixXd& P,
     const MatrixXd& Zsig,
@@ -152,7 +162,8 @@ namespace test {
   namespace build {
     MatrixXd Xsig_pred();
     MatrixXd Xsig_aug();
-    VectorXd x();
+    VectorXd x1();
+    VectorXd x2();
     MatrixXd P1();
     MatrixXd P2();
     MatrixXd Zsig();
@@ -166,7 +177,8 @@ namespace test {
   void testPredictMeanAndCovariance();
   void testPredictRadarMeasurement();
   void testPredictLidarMeasurement();
-  void testUpdateState();
+  void testUpdateRadarState();
+  void testUpdateLidarState();
 }
 
 #endif /* UKF_H */

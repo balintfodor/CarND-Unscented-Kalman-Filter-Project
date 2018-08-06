@@ -264,17 +264,47 @@ UKFDetails::MeanCovPair UKFDetails::predictRadarMeasurement(
     return make_pair(z_pred, S);
 }
 
+UKFDetails::MeanCovPair UKFDetails::updateRadarState(
+    const MatrixXd& Xsig_pred,
+    const MatrixXd& weights,
+    const VectorXd& x,
+    const MatrixXd& P,
+    const MatrixXd& Zsig,
+    const VectorXd& z_pred,
+    const MatrixXd& S,
+    const VectorXd& z) const
+{
+    static int n_z = 3;
+    MatrixXd Tc = MatrixXd::Zero(n_x_, n_z);
+    for (int i = 0; i < n_2aug1_; i++) {
+        VectorXd z_diff = Zsig.col(i) - z_pred;
+        z_diff(1) = normalizeAngle(z_diff(1));
+        VectorXd x_diff = Xsig_pred.col(i) - x;
+        x_diff(3) = normalizeAngle(x_diff(3));
+        Tc = Tc + weights(i) * x_diff * z_diff.transpose();
+    }
+    
+    MatrixXd K = Tc * S.inverse();
+    VectorXd z_diff = z - z_pred;
+
+    z_diff(1) = normalizeAngle(z_diff(1));
+
+    return make_pair(x + K * z_diff, P - K * S * K.transpose());
+}
+
 void test::run() {
     testGenerateAugmentedSigmaPoints();
     testPredictSigmaPoints();
     testPredictMeanAndCovariance();
     testPredictRadarMeasurement();
     testPredictLidarMeasurement();
+    testUpdateRadarState();
+    testUpdateLidarState();
 }
 
 void test::testGenerateAugmentedSigmaPoints() {
     UKFDetails ukfd(5, 7);
-    MatrixXd Xsig_aug = ukfd.generateAugmentedSigmaPoints(build::x(), build::P1(), 0.2, 0.2, 3 - ukfd.n_aug_);
+    MatrixXd Xsig_aug = ukfd.generateAugmentedSigmaPoints(build::x1(), build::P1(), 0.2, 0.2, 3 - ukfd.n_aug_);
 
     MatrixXd Xsig_aug_exp = MatrixXd(ukfd.n_aug_, 2 * ukfd.n_aug_ + 1);
     Xsig_aug_exp <<
@@ -352,7 +382,34 @@ void test::testPredictLidarMeasurement() {
     cout <<  __PRETTY_FUNCTION__ << " TODO passed\n";
 }
 
-void test::testUpdateState() {
+void test::testUpdateRadarState() {
+
+    UKF ukf;
+    UKFDetails ukfd(ukf.n_x_, ukf.n_aug_);
+
+    UKFDetails::MeanCovPair xP = ukfd.updateRadarState(
+        build::Xsig_pred(), ukf.weights_, build::x2(),
+        build::P2(), build::Zsig(), build::z_pred(),
+        build::S(), build::z());
+
+    VectorXd x_exp = VectorXd(ukfd.n_x_);
+    x_exp << 5.92276,1.41823,2.15593,0.489274,0.321338;
+
+    MatrixXd P_exp = MatrixXd(ukfd.n_x_, ukfd.n_x_);
+    P_exp << 
+        0.00361579,-0.000357881,0.00208316,-0.000937196,-0.00071727,
+        -0.000357881,0.00539867,0.00156846,0.00455342,0.00358885,
+        0.00208316,0.00156846,0.00410651,0.00160333,0.00171811,
+        -0.000937196,0.00455342,0.00160333,0.00652634,0.00669436,
+        -0.00071719,0.00358884,0.00171811,0.00669426,0.00881797;
+
+    assert(xP.first.isApprox(x_exp, 10e-6));
+    assert(xP.second.isApprox(P_exp, 10e-6));
+
+    cout <<  __PRETTY_FUNCTION__ << " passed\n";
+}
+
+void test::testUpdateLidarState() {
     cout <<  __PRETTY_FUNCTION__ << " TODO passed\n";
 }
 
@@ -383,7 +440,18 @@ MatrixXd test::build::Xsig_aug() {
     return Xsig_aug;
 }
 
-VectorXd test::build::x() {
+VectorXd test::build::x2() {
+    VectorXd x = VectorXd(5);
+    x <<
+        5.93637,
+        1.49035,
+        2.20528,
+        0.536853,
+        0.353577;
+    return x;
+}
+
+VectorXd test::build::x1() {
     VectorXd x = VectorXd(5);
     x <<
         5.7441,
@@ -425,7 +493,7 @@ MatrixXd test::build::Zsig() {
       6.1190,  6.2334,  6.1531,  6.1283,  6.1143,  6.1190,  6.1221,  6.1190,  6.0079,  6.0883,  6.1125,  6.1248,  6.1190,  6.1188,  6.12057,
      0.24428,  0.2337, 0.27316, 0.24616, 0.24846, 0.24428, 0.24530, 0.24428, 0.25700, 0.21692, 0.24433, 0.24193, 0.24428, 0.24515, 0.245239,
       2.1104,  2.2188,  2.0639,   2.187,  2.0341,  2.1061,  2.1450,  2.1092,  2.0016,   2.129,  2.0346,  2.1651,  2.1145,  2.0786,  2.11295;
-
+    return Zsig;
 }
 
 VectorXd test::build::z_pred() {
@@ -452,8 +520,8 @@ VectorXd test::build::z() {
     int n_z = 3;
     VectorXd z = VectorXd(n_z);
     z <<
-      5.9214,   //rho in m
-      0.2187,   //phi in rad
-      2.0062;   //rho_dot in m/s
+      5.9214,
+      0.2187,
+      2.0062;
     return z;
 }

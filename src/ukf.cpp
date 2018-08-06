@@ -219,6 +219,51 @@ UKFDetails::MeanCovPair UKFDetails::predictMeanAndCovariance(
     return make_pair(x, P);
 }
 
+UKFDetails::MeanCovPair UKFDetails::predictRadarMeasurement(
+    const MatrixXd& Xsig_pred,
+    const VectorXd& weights,
+    double std_radr,
+    double std_radphi,
+    double std_radrd) const
+{
+    static int n_z = 3;
+    MatrixXd Zsig = MatrixXd(n_z, n_2aug1_);
+
+    for (int i = 0; i < n_2aug1_; i++) {
+        const double& p_x = Xsig_pred(0,i);
+        const double& p_y = Xsig_pred(1,i);
+        const double& v  = Xsig_pred(2,i);
+        const double& yaw = Xsig_pred(3,i);
+
+        double v1 = cos(yaw) * v;
+        double v2 = sin(yaw) * v;
+
+        Zsig(0, i) = sqrt(p_x * p_x + p_y * p_y);
+        Zsig(1, i) = atan2(p_y, p_x);
+        Zsig(2, i) = (p_x * v1 + p_y * v2 ) / sqrt(p_x * p_x + p_y * p_y);
+    }
+
+    VectorXd z_pred = VectorXd::Zero(n_z);
+    for (int i = 0; i < n_2aug1_; i++) {
+        z_pred = z_pred + weights(i) * Zsig.col(i);
+    }
+
+    MatrixXd S = MatrixXd::Zero(n_z, n_z);
+    for (int i = 0; i < n_2aug1_; i++) {
+        VectorXd z_diff = Zsig.col(i) - z_pred;
+        z_diff(1) = normalizeAngle(z_diff(1));
+        S = S + weights(i) * z_diff * z_diff.transpose();
+    }
+
+    MatrixXd R = MatrixXd(n_z, n_z);
+    R << std_radr * std_radr, 0, 0,
+        0, std_radphi * std_radphi, 0,
+        0, 0,std_radrd * std_radrd;
+    S = S + R;
+
+    return make_pair(z_pred, S);
+}
+
 void test::run() {
     testGenerateAugmentedSigmaPoints();
     testPredictSigmaPoints();
@@ -269,7 +314,7 @@ void test::testPredictMeanAndCovariance() {
     
     VectorXd x_exp = VectorXd(ukfd.n_x_);
     x_exp << 5.93637, 1.49035, 2.20528, 0.536853, 0.353577;
-    
+
     MatrixXd P_exp = MatrixXd(ukfd.n_x_, ukfd.n_x_);
     P_exp << 0.00543425,-0.0024053,0.00341576,-0.00348196,-0.00299378,
         -0.0024053,0.010845,0.0014923,0.00980182,0.00791091,
@@ -284,7 +329,23 @@ void test::testPredictMeanAndCovariance() {
 }
 
 void test::testPredictRadarMeasurement() {
-    cout <<  __PRETTY_FUNCTION__ << " TODO passed\n";
+
+    UKF ukf;
+    UKFDetails ukfd(ukf.n_x_, ukf.n_aug_);
+
+    UKFDetails::MeanCovPair z_pred_S = ukfd.predictRadarMeasurement(build::Xsig_pred(), ukf.weights_, 0.3, 0.0175, 0.1);
+
+    VectorXd z_pred_exp = VectorXd(3);
+    z_pred_exp << 6.12155,0.245993,2.10313;
+    MatrixXd S_exp = MatrixXd(3, 3);
+    S_exp << 0.0946171, -0.000139448, 0.00407016,
+        -0.000139448, 0.000617548, -0.000770652,
+        0.00407016, -0.000770652, 0.0180917;
+
+    assert(z_pred_S.first.isApprox(z_pred_exp, 10e-6));
+    assert(z_pred_S.second.isApprox(S_exp, 10e-6));
+
+    cout <<  __PRETTY_FUNCTION__ << " passed\n";
 }
 
 void test::testPredictLidarMeasurement() {

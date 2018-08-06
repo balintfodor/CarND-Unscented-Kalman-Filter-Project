@@ -107,6 +107,7 @@ class UKFDetails {
 public:
   int n_x_;
   int n_aug_;
+  int n_z_;
   int n_2aug1_;
   typedef std::pair<VectorXd, MatrixXd> MeanCovPair;
 
@@ -130,7 +131,7 @@ public:
     double std_radr,
     double std_radphi,
     double std_radrd) const;
-  MeanCovPair predictRidarMeasurement(
+  MeanCovPair predictLidarMeasurement(
     const MatrixXd& Xsig_pred,
     const VectorXd& weights,
     double std_laspx,

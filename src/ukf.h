@@ -6,9 +6,63 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <tuple>
 
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
+
+class UKFDetails {
+public:
+  int n_x_;
+  int n_aug_;
+  int n_z_;
+  int n_2aug1_;
+  typedef std::pair<VectorXd, MatrixXd> MeanCovPair;
+
+  UKFDetails();
+  MatrixXd generateAugmentedSigmaPoints(
+    const VectorXd& x,
+    const MatrixXd& P,
+    double std_a,
+    double std_yawdd,
+    double lambda) const;
+  MatrixXd predictSigmaPoints(
+    const MatrixXd& Xsig_aug,
+    double delta_t) const;
+  MeanCovPair predictMeanAndCovariance(
+    const MatrixXd& Xsig_pred,
+    const VectorXd& weights) const;
+
+  std::tuple<VectorXd, MatrixXd, MatrixXd> predictRadarMeasurement(
+    const MatrixXd& Xsig_pred,
+    const VectorXd& weights,
+    double std_radr,
+    double std_radphi,
+    double std_radrd) const;
+  std::tuple<VectorXd, MatrixXd, MatrixXd> predictLidarMeasurement(
+    const MatrixXd& Xsig_pred,
+    const VectorXd& weights,
+    double std_laspx,
+    double std_laspy) const;
+  MeanCovPair updateRadarState(
+    const MatrixXd& Xsig_pred,
+    const MatrixXd& weights,
+    const VectorXd& x,
+    const MatrixXd& P,
+    const MatrixXd& Zsig,
+    const VectorXd& z_pred,
+    const MatrixXd& S,
+    const VectorXd& z) const;
+  MeanCovPair updateLidarState(
+    const MatrixXd& Xsig_pred,
+    const MatrixXd& weights,
+    const VectorXd& x,
+    const MatrixXd& P,
+    const MatrixXd& Zsig,
+    const VectorXd& z_pred,
+    const MatrixXd& S,
+    const VectorXd& z) const;
+};
 
 class UKF {
 public:
@@ -67,6 +121,8 @@ public:
   ///* Sigma point spreading parameter
   double lambda_;
 
+  UKFDetails details_;
+
   /**
    * Constructor
    */
@@ -101,59 +157,10 @@ public:
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
-};
 
-class UKFDetails {
-public:
-  int n_x_;
-  int n_aug_;
-  int n_z_;
-  int n_2aug1_;
-  typedef std::pair<VectorXd, MatrixXd> MeanCovPair;
+  void InitLaser(MeasurementPackage meas_package);
+  void InitRadar(MeasurementPackage meas_package);
 
-  UKFDetails(int n_x, int n_aug);
-  MatrixXd generateAugmentedSigmaPoints(
-    const VectorXd& x,
-    const MatrixXd& P,
-    double std_a,
-    double std_yawdd,
-    double lambda) const;
-  MatrixXd predictSigmaPoints(
-    const MatrixXd& Xsig_aug,
-    double delta_t) const;
-  MeanCovPair predictMeanAndCovariance(
-    const MatrixXd& Xsig_pred,
-    const VectorXd& weights) const;
-
-  MeanCovPair predictRadarMeasurement(
-    const MatrixXd& Xsig_pred,
-    const VectorXd& weights,
-    double std_radr,
-    double std_radphi,
-    double std_radrd) const;
-  MeanCovPair predictLidarMeasurement(
-    const MatrixXd& Xsig_pred,
-    const VectorXd& weights,
-    double std_laspx,
-    double std_laspy) const;
-  MeanCovPair updateRadarState(
-    const MatrixXd& Xsig_pred,
-    const MatrixXd& weights,
-    const VectorXd& x,
-    const MatrixXd& P,
-    const MatrixXd& Zsig,
-    const VectorXd& z_pred,
-    const MatrixXd& S,
-    const VectorXd& z) const;
-  MeanCovPair updateLidarState(
-    const MatrixXd& Xsig_pred,
-    const MatrixXd& weights,
-    const VectorXd& x,
-    const MatrixXd& P,
-    const MatrixXd& Zsig,
-    const VectorXd& z_pred,
-    const MatrixXd& S,
-    const VectorXd& z) const;
 };
 
 namespace test {

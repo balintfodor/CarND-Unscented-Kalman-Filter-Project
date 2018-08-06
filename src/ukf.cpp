@@ -262,8 +262,25 @@ void test::testPredictSigmaPoints() {
 }
 
 void test::testPredictMeanAndCovariance() {
-    UKFDetails ukfd(5, 7);
-    cout <<  __PRETTY_FUNCTION__ << " TODO passed\n";
+    UKF ukf;
+    UKFDetails ukfd(ukf.n_x_, ukf.n_aug_);
+
+    UKFDetails::MeanCovPair xP = ukfd.predictMeanAndCovariance(build::Xsig_pred(), ukf.weights_);
+    
+    VectorXd x_exp = VectorXd(ukfd.n_x_);
+    x_exp << 5.93637, 1.49035, 2.20528, 0.536853, 0.353577;
+    
+    MatrixXd P_exp = MatrixXd(ukfd.n_x_, ukfd.n_x_);
+    P_exp << 0.00543425,-0.0024053,0.00341576,-0.00348196,-0.00299378,
+        -0.0024053,0.010845,0.0014923,0.00980182,0.00791091,
+        0.00341576,0.0014923,0.00580129,0.000778632,0.000792973,
+        -0.00348196,0.00980182,0.000778632,0.0119238,0.0112491,
+        -0.00299378,0.00791091,0.000792973,0.0112491,0.0126972;
+
+    assert(xP.first.isApprox(x_exp, 10e-6));
+    assert(xP.second.isApprox(P_exp, 10e-6));
+
+    cout <<  __PRETTY_FUNCTION__ << " passed\n";
 }
 
 void test::testPredictRadarMeasurement() {

@@ -18,7 +18,7 @@ double normalizeAngle(double rad) {
  */
 UKF::UKF() {
   // if this is false, laser measurements will be ignored (except during init)
-  use_laser_ = false;
+  use_laser_ = true;
 
   // if this is false, radar measurements will be ignored (except during init)
   use_radar_ = true;
@@ -127,14 +127,22 @@ void UKF::Prediction(double delta_t) {
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
-  /**
-  TODO:
 
-  Complete this function! Use lidar data to update the belief about the object's
-  position. Modify the state vector, x_, and covariance, P_.
+    std::tuple<VectorXd, MatrixXd, MatrixXd> z_pred_S_Zsig =
+        details_.predictLidarMeasurement(Xsig_pred_, weights_, std_laspx_, std_laspy_);
 
-  You'll also need to calculate the lidar NIS.
-  */
+    VectorXd& z_pred = get<0>(z_pred_S_Zsig);
+    MatrixXd& S = get<1>(z_pred_S_Zsig);
+    MatrixXd& Zsig = get<2>(z_pred_S_Zsig);
+    VectorXd& z = meas_package.raw_measurements_;
+
+    UKFDetails::MeanCovPair xP = details_.updateLidarState(
+        Xsig_pred_, weights_, x_, P_, Zsig, z_pred, S, z);
+    x_ = move(xP.first);
+    P_ = move(xP.second);
+
+    double nis = (z - z_pred).transpose() * S.inverse() * (z - z_pred);
+    std::cout << "LIDAR NIS: " << nis << std::endl;
 }
 
 /**
@@ -142,6 +150,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateRadar(MeasurementPackage meas_package) {
+    
     std::tuple<VectorXd, MatrixXd, MatrixXd> z_pred_S_Zsig =
         details_.predictRadarMeasurement(Xsig_pred_, weights_, std_radr_, std_radphi_, std_radrd_);
 
@@ -267,10 +276,10 @@ std::tuple<VectorXd, MatrixXd, MatrixXd> UKFDetails::predictRadarMeasurement(
     MatrixXd Zsig = MatrixXd(n_z, n_2aug1_);
 
     for (int i = 0; i < n_2aug1_; i++) {
-        const double& p_x = Xsig_pred(0,i);
-        const double& p_y = Xsig_pred(1,i);
-        const double& v  = Xsig_pred(2,i);
-        const double& yaw = Xsig_pred(3,i);
+        const double& p_x = Xsig_pred(0, i);
+        const double& p_y = Xsig_pred(1, i);
+        const double& v  = Xsig_pred(2, i);
+        const double& yaw = Xsig_pred(3, i);
 
         double v1 = cos(yaw) * v;
         double v2 = sin(yaw) * v;
@@ -295,7 +304,40 @@ std::tuple<VectorXd, MatrixXd, MatrixXd> UKFDetails::predictRadarMeasurement(
     MatrixXd R = MatrixXd(n_z, n_z);
     R << std_radr * std_radr, 0, 0,
         0, std_radphi * std_radphi, 0,
-        0, 0,std_radrd * std_radrd;
+        0, 0, std_radrd * std_radrd;
+    S = S + R;
+
+    return std::tuple<VectorXd, MatrixXd, MatrixXd>(z_pred, S, Zsig);
+}
+
+std::tuple<VectorXd, MatrixXd, MatrixXd> UKFDetails::predictLidarMeasurement(
+    const MatrixXd& Xsig_pred,
+    const VectorXd& weights,
+    double std_laspx,
+    double std_laspy) const
+{
+    static int n_z = 2;
+    MatrixXd Zsig = MatrixXd(n_z, n_2aug1_);
+
+    for (int i = 0; i < n_2aug1_; i++) {
+        Zsig(0, i) = Xsig_pred(0, i);
+        Zsig(1, i) = Xsig_pred(1, i);
+    }
+
+    VectorXd z_pred = VectorXd::Zero(n_z);
+    for (int i = 0; i < n_2aug1_; i++) {
+        z_pred = z_pred + weights(i) * Zsig.col(i);
+    }
+
+    MatrixXd S = MatrixXd::Zero(n_z, n_z);
+    for (int i = 0; i < n_2aug1_; i++) {
+        VectorXd z_diff = Zsig.col(i) - z_pred;
+        S = S + weights(i) * z_diff * z_diff.transpose();
+    }
+
+    MatrixXd R = MatrixXd(n_z, n_z);
+    R << std_laspx * std_laspx, 0,
+        0, std_laspy * std_laspy;
     S = S + R;
 
     return std::tuple<VectorXd, MatrixXd, MatrixXd>(z_pred, S, Zsig);
@@ -329,14 +371,37 @@ UKFDetails::MeanCovPair UKFDetails::updateRadarState(
     return make_pair(x + K * z_diff, P - K * S * K.transpose());
 }
 
+UKFDetails::MeanCovPair UKFDetails::updateLidarState(
+    const MatrixXd& Xsig_pred,
+    const MatrixXd& weights,
+    const VectorXd& x,
+    const MatrixXd& P,
+    const MatrixXd& Zsig,
+    const VectorXd& z_pred,
+    const MatrixXd& S,
+    const VectorXd& z) const
+{
+    static int n_z = 2;
+    MatrixXd Tc = MatrixXd::Zero(n_x_, n_z);
+    for (int i = 0; i < n_2aug1_; i++) {
+        VectorXd z_diff = Zsig.col(i) - z_pred;
+        VectorXd x_diff = Xsig_pred.col(i) - x;
+        x_diff(3) = normalizeAngle(x_diff(3));
+        Tc = Tc + weights(i) * x_diff * z_diff.transpose();
+    }
+    
+    MatrixXd K = Tc * S.inverse();
+    VectorXd z_diff = z - z_pred;
+
+    return make_pair(x + K * z_diff, P - K * S * K.transpose());
+}
+
 void test::run() {
     testGenerateAugmentedSigmaPoints();
     testPredictSigmaPoints();
     testPredictMeanAndCovariance();
     testPredictRadarMeasurement();
-    testPredictLidarMeasurement();
     testUpdateRadarState();
-    testUpdateLidarState();
 }
 
 void test::testGenerateAugmentedSigmaPoints() {
@@ -415,10 +480,6 @@ void test::testPredictRadarMeasurement() {
     cout <<  __PRETTY_FUNCTION__ << " passed\n";
 }
 
-void test::testPredictLidarMeasurement() {
-    cout <<  __PRETTY_FUNCTION__ << " TODO passed\n";
-}
-
 void test::testUpdateRadarState() {
 
     UKF ukf;
@@ -444,10 +505,6 @@ void test::testUpdateRadarState() {
     assert(xP.second.isApprox(P_exp, 10e-6));
 
     cout <<  __PRETTY_FUNCTION__ << " passed\n";
-}
-
-void test::testUpdateLidarState() {
-    cout <<  __PRETTY_FUNCTION__ << " TODO passed\n";
 }
 
 MatrixXd test::build::Xsig_pred() {

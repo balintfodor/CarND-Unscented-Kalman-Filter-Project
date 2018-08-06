@@ -183,9 +183,7 @@ namespace test {
   void testPredictSigmaPoints();
   void testPredictMeanAndCovariance();
   void testPredictRadarMeasurement();
-  void testPredictLidarMeasurement();
   void testUpdateRadarState();
-  void testUpdateLidarState();
 }
 
 #endif /* UKF_H */

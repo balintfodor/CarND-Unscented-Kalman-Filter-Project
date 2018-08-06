@@ -1,11 +1,16 @@
 #include "ukf.h"
 #include "Eigen/Dense"
 #include <iostream>
+#include <cmath>
 
 using namespace std;
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 using std::vector;
+
+double normalizeAngle(double rad) {
+    return std::remainder(rad, 2.0 * M_PI);
+}
 
 /**
  * Initializes Unscented Kalman filter
@@ -145,6 +150,54 @@ MatrixXd UKF::generateAugmentedSigmaPoints(
     return Xsig_aug;
 }
 
+MatrixXd UKF::predictSigmaPoints(
+    const MatrixXd& Xsig_aug,
+    double delta_t) const
+{
+    MatrixXd Xsig_pred = MatrixXd::Zero(n_x_, n_2aug1_);
+    double dt2 = delta_t * delta_t;
+    for (int i = 0; i < n_2aug1_; i++) {
+        const double& px = Xsig_aug(0, i);
+        const double& py = Xsig_aug(1, i);
+        const double& v = Xsig_aug(2, i);
+        const double& yaw = Xsig_aug(3, i);
+        const double& yawd = Xsig_aug(4, i);
+        const double& nu_a = Xsig_aug(5, i);
+        const double& nu_yawdd = Xsig_aug(6, i);
+
+        double& new_px = Xsig_pred(0, i);
+        double& new_py = Xsig_pred(1, i);
+        double& new_v = Xsig_pred(2, i);
+        double& new_yaw = Xsig_pred(3, i);
+        double& new_yawd = Xsig_pred(4, i);
+
+        double cos_yaw = cos(yaw);
+        double sin_yaw = sin(yaw);
+
+        double px_noise = 0.5 * dt2 * cos_yaw * nu_a;
+        double py_noise = 0.5 * dt2 * sin_yaw * nu_a;
+        double v_noise = delta_t * nu_a;
+        double yaw_noise = 0.5 * dt2 * nu_yawdd;
+        double yawd_noise = delta_t * nu_yawdd;
+
+        if (fabs(yawd) > 10e-6) {
+            double r = v / yawd;
+            double yd = yawd * delta_t;
+            new_px = px + r * ( sin(yaw + yd) - sin_yaw) + px_noise;
+            new_py = py + r * (-cos(yaw + yd) + cos_yaw) + py_noise;
+            new_yaw = yaw + yd + yaw_noise;
+        } else {
+            new_px = px + v * cos_yaw * delta_t + px_noise;
+            new_py = py + v * sin_yaw * delta_t + py_noise;
+            new_yaw = yaw + yaw_noise;
+        }
+
+        new_v = v + v_noise;
+        new_yawd = yawd + yawd_noise;
+    }
+    return Xsig_pred;
+}
+
 void test::run() {
     testGenerateAugmentedSigmaPoints();
     testPredictSigmaPoints();
@@ -155,10 +208,10 @@ void test::run() {
 
 void test::testGenerateAugmentedSigmaPoints() {
     UKF ukf;
-    MatrixXd Xsig_pred = ukf.generateAugmentedSigmaPoints(build::x(), build::P1(), 0.2, 0.2, 3 - ukf.n_aug_);
+    MatrixXd Xsig_aug = ukf.generateAugmentedSigmaPoints(build::x(), build::P1(), 0.2, 0.2, 3 - ukf.n_aug_);
 
-    MatrixXd Xsig_pred_exp = MatrixXd(ukf.n_aug_, 2 * ukf.n_aug_ + 1);
-    Xsig_pred_exp <<
+    MatrixXd Xsig_aug_exp = MatrixXd(ukf.n_aug_, 2 * ukf.n_aug_ + 1);
+    Xsig_aug_exp <<
         5.7441,5.85768,5.7441,5.7441,5.7441,5.7441,5.7441,5.7441,5.63052,5.7441,5.7441,5.7441,5.7441,5.7441,5.7441,
         1.38,1.34566,1.52806,1.38,1.38,1.38,1.38,1.38,1.41434,1.23194,1.38,1.38,1.38,1.38,1.38,
         2.2049,2.28414,2.24557,2.29582,2.2049,2.2049,2.2049,2.2049,2.12566,2.16423,2.11398,2.2049,2.2049,2.2049,2.2049,
@@ -167,11 +220,24 @@ void test::testGenerateAugmentedSigmaPoints() {
         0,0,0,0,0,0,0.34641,0,0,0,0,0,0,-0.34641,0,
         0,0,0,0,0,0,0,0.34641,0,0,0,0,0,0,-0.34641;
 
-    assert(Xsig_pred.isApprox(Xsig_pred_exp, 10e-6));
+    assert(Xsig_aug.isApprox(Xsig_aug_exp, 10e-6));
+    cout <<  __PRETTY_FUNCTION__ << " passed\n";
 }
 
 void test::testPredictSigmaPoints() {
+    UKF ukf;
+    MatrixXd Xsig_pred = ukf.predictSigmaPoints(build::Xsig_aug(), 0.1);
 
+    MatrixXd Xsig_pred_exp = MatrixXd(ukf.n_x_, ukf.n_2aug1_);
+    Xsig_pred_exp <<
+        5.93553,6.06251,5.92217,5.9415,5.92361,5.93516,5.93705,5.93553,5.80832,5.94481,5.92935,5.94553,5.93589,5.93401,5.93553,
+        1.48939,1.44673,1.66484,1.49719,1.508,1.49001,1.49022,1.48939,1.5308,1.31287,1.48182,1.46967,1.48876,1.48855,1.48939,
+        2.2049,2.28414,2.24557,2.29582,2.2049,2.2049,2.23954,2.2049,2.12566,2.16423,2.11398,2.2049,2.2049,2.17026,2.2049,
+        0.53678,0.473387,0.678098,0.554557,0.643644,0.543372,0.53678,0.538512,0.600173,0.395462,0.519003,0.429916,0.530188,0.53678,0.535048,
+        0.3528,0.299973,0.462123,0.376339,0.48417,0.418721,0.3528,0.387441,0.405627,0.243477,0.329261,0.22143,0.286879,0.3528,0.318159;
+
+    assert(Xsig_pred.isApprox(Xsig_pred_exp, 10e-6));
+    cout <<  __PRETTY_FUNCTION__ << " passed\n";
 }
 
 void test::testPredictMeanAndCovariance() {

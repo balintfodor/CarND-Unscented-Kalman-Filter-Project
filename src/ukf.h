@@ -67,8 +67,6 @@ public:
   ///* Sigma point spreading parameter
   double lambda_;
 
-  int n_2aug1_;
-
   /**
    * Constructor
    */
@@ -103,8 +101,16 @@ public:
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
+};
 
+class UKFDetails {
+public:
+  int n_x_;
+  int n_aug_;
+  int n_2aug1_;
   typedef std::pair<VectorXd, MatrixXd> MeanCovPair;
+
+  UKFDetails(int n_x, int n_aug);
   MatrixXd generateAugmentedSigmaPoints(
     const VectorXd& x,
     const MatrixXd& P,

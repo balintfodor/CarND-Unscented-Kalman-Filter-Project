@@ -54,12 +54,11 @@ UKF::UKF() {
   
   n_x_ = 5;
   n_aug_ = 7;
-  n_2aug1_ = 2 * n_aug_ + 1;
   lambda_ = 3 - n_aug_;
 
-  weights_ = VectorXd(n_2aug1_);
+  weights_ = VectorXd(2 * n_aug_ + 1);
   weights_(0) = lambda_ / (lambda_ + n_aug_);
-  for (int i = 1; i < n_2aug1_; i++) {
+  for (int i = 1; i < 2 * n_aug_ + 1; i++) {
     weights_(i) = 0.5 / (n_aug_ + lambda_);
   }
 }
@@ -123,7 +122,11 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   */
 }
 
-MatrixXd UKF::generateAugmentedSigmaPoints(
+UKFDetails::UKFDetails(int n_x, int n_aug) : n_x_(n_x), n_aug_(n_aug) {
+    n_2aug1_ = 2 * n_aug_ + 1;
+}
+
+MatrixXd UKFDetails::generateAugmentedSigmaPoints(
     const VectorXd& x,
     const MatrixXd& P,
     double std_a,
@@ -150,7 +153,7 @@ MatrixXd UKF::generateAugmentedSigmaPoints(
     return Xsig_aug;
 }
 
-MatrixXd UKF::predictSigmaPoints(
+MatrixXd UKFDetails::predictSigmaPoints(
     const MatrixXd& Xsig_aug,
     double delta_t) const
 {
@@ -198,6 +201,24 @@ MatrixXd UKF::predictSigmaPoints(
     return Xsig_pred;
 }
 
+UKFDetails::MeanCovPair UKFDetails::predictMeanAndCovariance(
+    const MatrixXd& Xsig_pred,
+    const VectorXd& weights) const
+{
+    VectorXd x = VectorXd::Zero(n_x_);
+    MatrixXd P = MatrixXd::Zero(n_x_, n_x_);
+    for (int i = 0; i < n_2aug1_; ++i) {
+        x += weights(i) * Xsig_pred.col(i);
+    }
+
+    for (int i = 0; i < n_2aug1_; ++i) {
+        VectorXd diff = Xsig_pred.col(i) - x;
+        diff(3) = normalizeAngle(diff(3));
+        P += weights(i) * diff * diff.transpose();
+    }
+    return make_pair(x, P);
+}
+
 void test::run() {
     testGenerateAugmentedSigmaPoints();
     testPredictSigmaPoints();
@@ -207,10 +228,10 @@ void test::run() {
 }
 
 void test::testGenerateAugmentedSigmaPoints() {
-    UKF ukf;
-    MatrixXd Xsig_aug = ukf.generateAugmentedSigmaPoints(build::x(), build::P1(), 0.2, 0.2, 3 - ukf.n_aug_);
+    UKFDetails ukfd(5, 7);
+    MatrixXd Xsig_aug = ukfd.generateAugmentedSigmaPoints(build::x(), build::P1(), 0.2, 0.2, 3 - ukfd.n_aug_);
 
-    MatrixXd Xsig_aug_exp = MatrixXd(ukf.n_aug_, 2 * ukf.n_aug_ + 1);
+    MatrixXd Xsig_aug_exp = MatrixXd(ukfd.n_aug_, 2 * ukfd.n_aug_ + 1);
     Xsig_aug_exp <<
         5.7441,5.85768,5.7441,5.7441,5.7441,5.7441,5.7441,5.7441,5.63052,5.7441,5.7441,5.7441,5.7441,5.7441,5.7441,
         1.38,1.34566,1.52806,1.38,1.38,1.38,1.38,1.38,1.41434,1.23194,1.38,1.38,1.38,1.38,1.38,
@@ -225,10 +246,10 @@ void test::testGenerateAugmentedSigmaPoints() {
 }
 
 void test::testPredictSigmaPoints() {
-    UKF ukf;
-    MatrixXd Xsig_pred = ukf.predictSigmaPoints(build::Xsig_aug(), 0.1);
+    UKFDetails ukfd(5, 7);
+    MatrixXd Xsig_pred = ukfd.predictSigmaPoints(build::Xsig_aug(), 0.1);
 
-    MatrixXd Xsig_pred_exp = MatrixXd(ukf.n_x_, ukf.n_2aug1_);
+    MatrixXd Xsig_pred_exp = MatrixXd(ukfd.n_x_, ukfd.n_2aug1_);
     Xsig_pred_exp <<
         5.93553,6.06251,5.92217,5.9415,5.92361,5.93516,5.93705,5.93553,5.80832,5.94481,5.92935,5.94553,5.93589,5.93401,5.93553,
         1.48939,1.44673,1.66484,1.49719,1.508,1.49001,1.49022,1.48939,1.5308,1.31287,1.48182,1.46967,1.48876,1.48855,1.48939,
@@ -241,19 +262,20 @@ void test::testPredictSigmaPoints() {
 }
 
 void test::testPredictMeanAndCovariance() {
-
+    UKFDetails ukfd(5, 7);
+    cout <<  __PRETTY_FUNCTION__ << " TODO passed\n";
 }
 
 void test::testPredictRadarMeasurement() {
-
+    cout <<  __PRETTY_FUNCTION__ << " TODO passed\n";
 }
 
 void test::testPredictLidarMeasurement() {
-
+    cout <<  __PRETTY_FUNCTION__ << " TODO passed\n";
 }
 
 void test::testUpdateState() {
-
+    cout <<  __PRETTY_FUNCTION__ << " TODO passed\n";
 }
 
 MatrixXd test::build::Xsig_pred() {

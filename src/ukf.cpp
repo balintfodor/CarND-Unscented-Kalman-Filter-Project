@@ -24,16 +24,16 @@ UKF::UKF() {
   use_radar_ = true;
 
   // initial state vector
-  x_ = VectorXd(details_.n_x_);
+  x_ = VectorXd::Zero(details_.n_x_);
 
   // initial covariance matrix
-  P_ = MatrixXd(details_.n_x_, details_.n_x_);
+  P_ = MatrixXd::Identity(details_.n_x_, details_.n_x_);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 0.02;
+  std_a_ = 0.5;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 0.02;
+  std_yawdd_ = 0.6;
   
   //DO NOT MODIFY measurement noise values below these are provided by the sensor manufacturer.
   // Laser measurement noise standard deviation position1 in m
@@ -75,6 +75,7 @@ void UKF::InitRadar(MeasurementPackage meas_package) {
     double phi = meas_package.raw_measurements_(1);
     x_(0) = r * cos(phi);
     x_(1) = r * sin(phi);
+    x_(2) = meas_package.raw_measurements_(2);
 }
 
 /**
@@ -99,7 +100,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     }
     
     double delta_t = meas_package.timestamp_ - time_us_;
-    Prediction(delta_t * 10e-6);
+    Prediction(delta_t * 1e-6);
     time_us_ = meas_package.timestamp_;
     
     if (meas_package.sensor_type_ == MeasurementPackage::LASER) {
@@ -118,8 +119,8 @@ void UKF::Prediction(double delta_t) {
     MatrixXd Xsig_aug = details_.generateAugmentedSigmaPoints(x_, P_, std_a_, std_yawdd_, lambda_);
     Xsig_pred_ = details_.predictSigmaPoints(Xsig_aug, delta_t);
     UKFDetails::MeanCovPair xP = details_.predictMeanAndCovariance(Xsig_pred_, weights_);
-    x_ = move(xP.first);
-    P_ = move(xP.second);
+    x_ = xP.first;
+    P_ = xP.second;
 }
 
 /**
@@ -138,11 +139,17 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
     UKFDetails::MeanCovPair xP = details_.updateLidarState(
         Xsig_pred_, weights_, x_, P_, Zsig, z_pred, S, z);
-    x_ = move(xP.first);
-    P_ = move(xP.second);
+    x_ = xP.first;
+    P_ = xP.second;
 
     double nis = (z - z_pred).transpose() * S.inverse() * (z - z_pred);
-    std::cout << "LIDAR NIS: " << nis << std::endl;
+    if (nis > 5.99) {
+        above_nis_line += 1;
+    }
+    n_meas += 1;
+    cout << (double)above_nis_line / (double)n_meas << endl;
+
+    // std::cout << "LIDAR NIS (5.99): \t\t\t" << nis << std::endl;
 }
 
 /**
@@ -165,7 +172,13 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     P_ = move(xP.second);
 
     double nis = (z - z_pred).transpose() * S.inverse() * (z - z_pred);
-    std::cout << "RADAR NIS: " << nis << std::endl;
+    if (nis > 7.81) {
+        above_nis_line += 1;
+    }
+    n_meas += 1;
+    cout << (double)above_nis_line / (double)n_meas << endl;
+
+    // std::cout << "RADAR NIS (7.81): " << nis << std::endl;
 }
 
 UKFDetails::UKFDetails() : n_x_(5), n_aug_(7) {
@@ -229,7 +242,7 @@ MatrixXd UKFDetails::predictSigmaPoints(
         double yaw_noise = 0.5 * dt2 * nu_yawdd;
         double yawd_noise = delta_t * nu_yawdd;
 
-        if (fabs(yawd) > 10e-6) {
+        if (fabs(yawd) > 1e-4) {
             double r = v / yawd;
             double yd = yawd * delta_t;
             new_px = px + r * ( sin(yaw + yd) - sin_yaw) + px_noise;
@@ -418,7 +431,7 @@ void test::testGenerateAugmentedSigmaPoints() {
         0,0,0,0,0,0,0.34641,0,0,0,0,0,0,-0.34641,0,
         0,0,0,0,0,0,0,0.34641,0,0,0,0,0,0,-0.34641;
 
-    assert(Xsig_aug.isApprox(Xsig_aug_exp, 10e-6));
+    assert(Xsig_aug.isApprox(Xsig_aug_exp, 1e-5));
     cout <<  __PRETTY_FUNCTION__ << " passed\n";
 }
 
@@ -434,7 +447,7 @@ void test::testPredictSigmaPoints() {
         0.53678,0.473387,0.678098,0.554557,0.643644,0.543372,0.53678,0.538512,0.600173,0.395462,0.519003,0.429916,0.530188,0.53678,0.535048,
         0.3528,0.299973,0.462123,0.376339,0.48417,0.418721,0.3528,0.387441,0.405627,0.243477,0.329261,0.22143,0.286879,0.3528,0.318159;
 
-    assert(Xsig_pred.isApprox(Xsig_pred_exp, 10e-6));
+    assert(Xsig_pred.isApprox(Xsig_pred_exp, 1e-5));
     cout <<  __PRETTY_FUNCTION__ << " passed\n";
 }
 
@@ -454,8 +467,8 @@ void test::testPredictMeanAndCovariance() {
         -0.00348196,0.00980182,0.000778632,0.0119238,0.0112491,
         -0.00299378,0.00791091,0.000792973,0.0112491,0.0126972;
 
-    assert(xP.first.isApprox(x_exp, 10e-6));
-    assert(xP.second.isApprox(P_exp, 10e-6));
+    assert(xP.first.isApprox(x_exp, 1e-5));
+    assert(xP.second.isApprox(P_exp, 1e-5));
 
     cout <<  __PRETTY_FUNCTION__ << " passed\n";
 }
@@ -474,8 +487,8 @@ void test::testPredictRadarMeasurement() {
         -0.000139448, 0.000617548, -0.000770652,
         0.00407016, -0.000770652, 0.0180917;
 
-    assert(get<0>(z_pred_S_Zsig).isApprox(z_pred_exp, 10e-6));
-    assert(get<1>(z_pred_S_Zsig).isApprox(S_exp, 10e-6));
+    assert(get<0>(z_pred_S_Zsig).isApprox(z_pred_exp, 1e-5));
+    assert(get<1>(z_pred_S_Zsig).isApprox(S_exp, 1e-5));
 
     cout <<  __PRETTY_FUNCTION__ << " passed\n";
 }
@@ -501,8 +514,8 @@ void test::testUpdateRadarState() {
         -0.000937196,0.00455342,0.00160333,0.00652634,0.00669436,
         -0.00071719,0.00358884,0.00171811,0.00669426,0.00881797;
 
-    assert(xP.first.isApprox(x_exp, 10e-6));
-    assert(xP.second.isApprox(P_exp, 10e-6));
+    assert(xP.first.isApprox(x_exp, 1e-5));
+    assert(xP.second.isApprox(P_exp, 1e-5));
 
     cout <<  __PRETTY_FUNCTION__ << " passed\n";
 }

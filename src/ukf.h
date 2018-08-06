@@ -122,6 +122,8 @@ public:
   double lambda_;
 
   UKFDetails details_;
+  int above_nis_line = 0;
+  int n_meas = 0;
 
   /**
    * Constructor

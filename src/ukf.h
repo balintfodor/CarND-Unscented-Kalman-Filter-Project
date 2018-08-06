@@ -67,7 +67,7 @@ public:
   ///* Sigma point spreading parameter
   double lambda_;
 
-  int n_sig_;
+  int n_2aug1_;
 
   /**
    * Constructor
@@ -104,19 +104,62 @@ public:
    */
   void UpdateRadar(MeasurementPackage meas_package);
 
-protected:
-  void InitLaser(MeasurementPackage meas_package);
-  void InitRadar(MeasurementPackage meas_package);
-  MatrixXd GenerateSigmaPoints(double std_a, double std_yawdd);
-  void PredictSigmaPoints(MatrixXd Xsig_aug, double delta_t);
-  void PredictMeanAndCovariance();
+  typedef std::pair<VectorXd, MatrixXd> MeanCovPair;
+  MatrixXd generateAugmentedSigmaPoints(
+    const VectorXd& x,
+    const MatrixXd& P,
+    double std_a,
+    double std_yawdd,
+    double lambda) const;
+  MatrixXd predictSigmaPoints(
+    const MatrixXd& Xsig_aug,
+    double delta_t) const;
+  MeanCovPair predictMeanAndCovariance(
+    const MatrixXd& Xsig_pred,
+    const VectorXd& weights) const;
 
-  void test();
-  void testGenerateSigmaPoints();
-  void testPredictSigmaPoints();
-  void testPredictMeanAndCovariance();
+  MeanCovPair predictRadarMeasurement(
+    const MatrixXd& Xsig_pred,
+    const VectorXd& weights,
+    double std_radr,
+    double std_radphi,
+    double std_radrd) const;
+  MeanCovPair predictRidarMeasurement(
+    const MatrixXd& Xsig_pred,
+    const VectorXd& weights,
+    double std_laspx,
+    double std_laspy) const;
+  MeanCovPair updateState(
+    const MatrixXd& Xsig_pred,
+    const VectorXd& x,
+    const MatrixXd& P,
+    const MatrixXd& Zsig,
+    const VectorXd& z_pred,
+    const MatrixXd& S,
+    const VectorXd& z) const;
 };
 
-double angleNormalize(double a);
+namespace test {
+  void run();
+
+  namespace build {
+    MatrixXd Xsig_pred();
+    MatrixXd Xsig_aug();
+    VectorXd x();
+    MatrixXd P1();
+    MatrixXd P2();
+    MatrixXd Zsig();
+    VectorXd z_pred();
+    MatrixXd S();
+    VectorXd z();
+  }
+
+  void testGenerateAugmentedSigmaPoints();
+  void testPredictSigmaPoints();
+  void testPredictMeanAndCovariance();
+  void testPredictRadarMeasurement();
+  void testPredictLidarMeasurement();
+  void testUpdateState();
+}
 
 #endif /* UKF_H */

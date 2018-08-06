@@ -27,13 +27,13 @@ UKF::UKF() {
   x_ = VectorXd::Zero(details_.n_x_);
 
   // initial covariance matrix
-  P_ = MatrixXd::Identity(details_.n_x_, details_.n_x_);
+  P_ = MatrixXd::Identity(details_.n_x_, details_.n_x_) * 0.5;
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
   std_a_ = 0.5;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 0.6;
+  std_yawdd_ = 0.5;
   
   //DO NOT MODIFY measurement noise values below these are provided by the sensor manufacturer.
   // Laser measurement noise standard deviation position1 in m

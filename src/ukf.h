@@ -103,6 +103,20 @@ public:
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
+
+protected:
+  void InitLaser(MeasurementPackage meas_package);
+  void InitRadar(MeasurementPackage meas_package);
+  MatrixXd GenerateSigmaPoints(double std_a, double std_yawdd);
+  void PredictSigmaPoints(MatrixXd Xsig_aug, double delta_t);
+  void PredictMeanAndCovariance();
+
+  void test();
+  void testGenerateSigmaPoints();
+  void testPredictSigmaPoints();
+  void testPredictMeanAndCovariance();
 };
+
+double angleNormalize(double a);
 
 #endif /* UKF_H */
